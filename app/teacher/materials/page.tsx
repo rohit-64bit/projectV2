@@ -58,13 +58,7 @@ export default function TeacherMaterialsPage() {
         title: formData.title,
         subject: formData.subject,
         description: formData.description,
-        uploadedBy: user?.id || '',
-        uploadedByName: user?.name || 'Unknown',
-        uploadedAt: new Date(),
-        fileUrl: '#',
         fileType: formData.fileType,
-        views: 0,
-        downloads: 0,
       });
 
       setFormData({ title: '', subject: '', description: '', fileType: 'pdf' });

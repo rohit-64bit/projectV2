@@ -1,17 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Navbar } from '@/components/navbar';
 import { Sidebar } from '@/components/sidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  useAdminUsers,
+  useCreateAdminUser,
+  useDeleteAdminUser,
+  useUpdateAdminUser,
+} from '@/hooks/use-data';
 import { Users, BarChart3, TrendingUp, Search } from 'lucide-react';
 
 export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState<'all' | 'student' | 'teacher' | 'admin'>('all');
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    role: 'student' as 'student' | 'teacher' | 'admin',
+    password: '',
+  });
+
+  const { data: users = [] } = useAdminUsers();
+  const createUserMutation = useCreateAdminUser();
+  const updateUserMutation = useUpdateAdminUser();
+  const deleteUserMutation = useDeleteAdminUser();
 
   const sidebarItems = [
     {
@@ -31,78 +49,22 @@ export default function UsersPage() {
     },
   ];
 
-  // Mock user data
-  const allUsers = [
-    {
-      id: '1',
-      name: 'John Student',
-      email: 'john@student.com',
-      role: 'student' as const,
-      joinDate: '2024-01-15',
-      status: 'active' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=john@student.com',
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah@teacher.com',
-      role: 'teacher' as const,
-      joinDate: '2023-06-20',
-      status: 'active' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=sarah@teacher.com',
-    },
-    {
-      id: '3',
-      name: 'Mike Teacher',
-      email: 'mike@teacher.com',
-      role: 'teacher' as const,
-      joinDate: '2023-08-10',
-      status: 'active' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mike@teacher.com',
-    },
-    {
-      id: '4',
-      name: 'Admin User',
-      email: 'admin@platform.com',
-      role: 'admin' as const,
-      joinDate: '2023-01-01',
-      status: 'active' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin@platform.com',
-    },
-    {
-      id: '5',
-      name: 'Emma Student',
-      email: 'emma@student.com',
-      role: 'student' as const,
-      joinDate: '2024-02-10',
-      status: 'active' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emma@student.com',
-    },
-    {
-      id: '6',
-      name: 'Alex Chen',
-      email: 'alex@student.com',
-      role: 'student' as const,
-      joinDate: '2024-03-05',
-      status: 'inactive' as const,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=alex@student.com',
-    },
-  ];
-
-  const filteredUsers = allUsers.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase());
-    const matchesRole = selectedRole === 'all' || user.role === selectedRole;
-    return matchesSearch && matchesRole;
-  });
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      const matchesSearch =
+        user.name.toLowerCase().includes(search.toLowerCase()) ||
+        user.email.toLowerCase().includes(search.toLowerCase());
+      const matchesRole = selectedRole === 'all' || user.role === selectedRole;
+      return matchesSearch && matchesRole;
+    });
+  }, [search, selectedRole, users]);
 
   const userStats = {
-    total: allUsers.length,
-    students: allUsers.filter((u) => u.role === 'student').length,
-    teachers: allUsers.filter((u) => u.role === 'teacher').length,
-    admins: allUsers.filter((u) => u.role === 'admin').length,
-    active: allUsers.filter((u) => u.status === 'active').length,
+    total: users.length,
+    students: users.filter((u) => u.role === 'student').length,
+    teachers: users.filter((u) => u.role === 'teacher').length,
+    admins: users.filter((u) => u.role === 'admin').length,
+    active: users.filter((u) => u.status === 'active').length,
   };
 
   const getRoleColor = (role: string) => {
@@ -119,9 +81,26 @@ export default function UsersPage() {
   };
 
   const getStatusColor = (status: string) => {
-    return status === 'active'
-      ? 'bg-green-100 text-green-800'
-      : 'bg-red-100 text-red-800';
+    return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await createUserMutation.mutateAsync(newUser);
+    setNewUser({ name: '', email: '', role: 'student', password: '' });
+  };
+
+  const handleToggleStatus = async (userId: string, status: 'active' | 'inactive') => {
+    await updateUserMutation.mutateAsync({
+      userId,
+      updates: {
+        status: status === 'active' ? 'inactive' : 'active',
+      },
+    });
+  };
+
+  const handleDelete = async (userId: string) => {
+    await deleteUserMutation.mutateAsync(userId);
   };
 
   return (
@@ -129,60 +108,35 @@ export default function UsersPage() {
       <Navbar />
       <Sidebar items={sidebarItems} />
 
-      {/* Main Content */}
       <main className="lg:ml-64 pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Manage Users</h1>
-            <p className="text-gray-600 mt-2">View and manage all platform users</p>
+            <p className="text-gray-600 mt-2">Admin MVP CRUD: create, update status, and delete users</p>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900">{userStats.total}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Students</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{userStats.students}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Teachers</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{userStats.teachers}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Admins</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{userStats.admins}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Active</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{userStats.active}</div>
-              </CardContent>
-            </Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-gray-900">{userStats.total}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Students</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{userStats.students}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Teachers</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{userStats.teachers}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Admins</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-purple-600">{userStats.admins}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Active</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{userStats.active}</div></CardContent></Card>
           </div>
 
-          {/* Search and Filter */}
+          <Card className="p-6 mb-8">
+            <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <Input value={newUser.name} onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))} placeholder="Name" required />
+              <Input value={newUser.email} onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" type="email" required />
+              <select value={newUser.role} onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value as 'student' | 'teacher' | 'admin' }))} className="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                <option value="student">student</option>
+                <option value="teacher">teacher</option>
+                <option value="admin">admin</option>
+              </select>
+              <Input value={newUser.password} onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))} placeholder="Temporary password" type="password" required />
+              <Button type="submit" disabled={createUserMutation.isPending}>Create User</Button>
+            </form>
+          </Card>
+
           <Card className="p-6 mb-8">
             <div className="space-y-4">
               <div className="relative">
@@ -202,10 +156,9 @@ export default function UsersPage() {
                     key={role}
                     onClick={() => setSelectedRole(role)}
                     className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors ${
-                      selectedRole === role
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      selectedRole === role ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
+                    type="button"
                   >
                     {role === 'all' ? 'All Users' : role + 's'}
                   </button>
@@ -214,7 +167,6 @@ export default function UsersPage() {
             </div>
           </Card>
 
-          {/* Users Table */}
           <Card>
             <CardHeader>
               <CardTitle>Users List ({filteredUsers.length})</CardTitle>
@@ -234,9 +186,7 @@ export default function UsersPage() {
                   <tbody className="divide-y">
                     {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-gray-500">
-                          No users found
-                        </td>
+                        <td colSpan={5} className="py-8 text-center text-gray-500">No users found</td>
                       </tr>
                     ) : (
                       filteredUsers.map((user) => (
@@ -253,21 +203,18 @@ export default function UsersPage() {
                               </div>
                             </div>
                           </td>
+                          <td className="py-3 px-4"><Badge className={getRoleColor(user.role)} variant="secondary">{user.role}</Badge></td>
+                          <td className="py-3 px-4 text-gray-600">{new Date(user.joinDate).toLocaleDateString()}</td>
+                          <td className="py-3 px-4"><Badge className={getStatusColor(user.status)} variant="secondary">{user.status}</Badge></td>
                           <td className="py-3 px-4">
-                            <Badge className={getRoleColor(user.role)} variant="secondary">
-                              {user.role}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-gray-600">{user.joinDate}</td>
-                          <td className="py-3 px-4">
-                            <Badge className={getStatusColor(user.status)} variant="secondary">
-                              {user.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4">
-                            <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">
-                              View
-                            </button>
+                            <div className="flex items-center gap-3">
+                              <button type="button" className="text-blue-600 hover:text-blue-700 font-medium text-sm" onClick={() => handleToggleStatus(user.id, user.status)}>
+                                {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button type="button" className="text-red-600 hover:text-red-700 font-medium text-sm" onClick={() => handleDelete(user.id)} disabled={deleteUserMutation.isPending}>
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
