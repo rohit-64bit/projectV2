@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { Sidebar } from '@/components/sidebar';
-import { useAuth } from '@/lib/auth-context';
 import { useCreateDoubt } from '@/hooks/use-data';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,6 @@ import { TrendingUp, BookOpen, MessageCircle, ArrowLeft } from 'lucide-react';
 
 export default function NewDoubtPage() {
   const router = useRouter();
-  const { user } = useAuth();
   const createDoubtMutation = useCreateDoubt();
   const [formData, setFormData] = useState({
     subject: '',
@@ -56,13 +54,9 @@ export default function NewDoubtPage() {
 
     try {
       await createDoubtMutation.mutateAsync({
-        studentId: user?.id || '',
-        studentName: user?.name || 'Student',
-        studentAvatar: user?.avatar || '',
         subject: formData.subject,
         question: formData.question,
         description: formData.description,
-        status: 'open',
       });
 
       router.push('/dashboard/student/doubts');

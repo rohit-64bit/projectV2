@@ -12,6 +12,7 @@ export interface User {
   avatar?: string;
   institution?: string;
   department?: string;
+  status?: 'active' | 'inactive';
 }
 
 interface AuthContextType {
@@ -19,69 +20,94 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string, role: UserRole) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function parseApiResponse(response: Response) {
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error || 'Request failed');
+  }
+  return data;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('auth_user');
-    if (stored) {
+    let mounted = true;
+
+    const loadUser = async () => {
       try {
-        setUser(JSON.parse(stored));
-      } catch (error) {
-        console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('auth_user');
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+
+        if (!mounted) return;
+
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data.user || null);
+        } else {
+          setUser(null);
+        }
+      } catch {
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
-    }
-    setIsLoading(false);
+    };
+
+    loadUser();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const login = async (email: string, password: string, role: UserRole) => {
-    // Mock authentication
-    if (!email || !password) {
-      throw new Error('Email and password are required');
-    }
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password, role }),
+    });
 
-    const newUser: User = {
-      id: `user_${Date.now()}`,
-      name: email.split('@')[0],
-      email,
-      role,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-    };
-
-    setUser(newUser);
-    localStorage.setItem('auth_user', JSON.stringify(newUser));
+    const data = await parseApiResponse(response);
+    setUser(data.user);
   };
 
   const register = async (name: string, email: string, password: string, role: UserRole) => {
-    // Mock registration
-    if (!name || !email || !password) {
-      throw new Error('All fields are required');
-    }
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, email, password, role }),
+    });
 
-    const newUser: User = {
-      id: `user_${Date.now()}`,
-      name,
-      email,
-      role,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-    };
-
-    setUser(newUser);
-    localStorage.setItem('auth_user', JSON.stringify(newUser));
+    const data = await parseApiResponse(response);
+    setUser(data.user);
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('auth_user');
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } finally {
+      setUser(null);
+    }
   };
 
   return (

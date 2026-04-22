@@ -1,28 +1,32 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  chatStorage,
-  materialsStorage,
-  doubtsStorage,
-  progressStorage,
-  ChatMessage,
-  LearningMaterial,
-  Doubt,
-  StudentProgress,
-  initializeSampleData,
-} from '@/lib/mock-data';
+import { ChatMessage, LearningMaterial, Doubt, StudentProgress } from '@/lib/mock-data';
 
-// Initialize sample data on first load
-if (typeof window !== 'undefined') {
-  initializeSampleData();
+async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Request failed');
+  }
+
+  return data as T;
 }
 
 // Chat Hooks
 export const useChat = (classId: string) => {
   return useQuery({
     queryKey: ['chat', classId],
-    queryFn: () => {
-      const messages = chatStorage.getMessages(classId);
-      return messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    queryFn: async () => {
+      const data = await apiRequest<{ messages: ChatMessage[] }>(`/api/chat/${encodeURIComponent(classId)}`);
+      return data.messages;
     },
     staleTime: 0,
   });
@@ -32,9 +36,11 @@ export const useSendMessage = (classId: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-      const newMessage = chatStorage.addMessage(classId, message);
-      return newMessage;
+    mutationFn: async (message: Pick<ChatMessage, 'content'>) => {
+      return apiRequest<{ message: ChatMessage }>(`/api/chat/${encodeURIComponent(classId)}`, {
+        method: 'POST',
+        body: JSON.stringify({ content: message.content }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chat', classId] });
@@ -46,11 +52,11 @@ export const useSendMessage = (classId: string) => {
 export const useMaterials = () => {
   return useQuery({
     queryKey: ['materials'],
-    queryFn: () => {
-      const materials = materialsStorage.getMaterials();
-      return materials.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    queryFn: async () => {
+      const data = await apiRequest<{ materials: LearningMaterial[] }>('/api/materials');
+      return data.materials;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -58,8 +64,11 @@ export const useUploadMaterial = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (material: Omit<LearningMaterial, 'id'>) => {
-      return materialsStorage.addMaterial(material);
+    mutationFn: async (material: Omit<LearningMaterial, 'id' | 'uploadedBy' | 'uploadedByName' | 'uploadedAt' | 'views' | 'downloads'> & Partial<Pick<LearningMaterial, 'fileUrl' | 'fileType'>>) => {
+      return apiRequest<{ material: LearningMaterial }>('/api/materials', {
+        method: 'POST',
+        body: JSON.stringify(material),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['materials'] });
@@ -72,8 +81,9 @@ export const useDownloadMaterial = () => {
 
   return useMutation({
     mutationFn: async (materialId: string) => {
-      materialsStorage.incrementDownloads(materialId);
-      return materialId;
+      return apiRequest<{ ok: boolean }>(`/api/materials/${materialId}/download`, {
+        method: 'POST',
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['materials'] });
@@ -85,9 +95,9 @@ export const useDownloadMaterial = () => {
 export const useDoubts = () => {
   return useQuery({
     queryKey: ['doubts'],
-    queryFn: () => {
-      const doubts = doubtsStorage.getDoubts();
-      return doubts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    queryFn: async () => {
+      const data = await apiRequest<{ doubts: Doubt[] }>('/api/doubts');
+      return data.doubts;
     },
     staleTime: 0,
   });
@@ -96,7 +106,11 @@ export const useDoubts = () => {
 export const useDoubt = (doubtId: string) => {
   return useQuery({
     queryKey: ['doubt', doubtId],
-    queryFn: () => doubtsStorage.getDoubtById(doubtId),
+    queryFn: async () => {
+      const data = await apiRequest<{ doubt: Doubt }>(`/api/doubts/${doubtId}`);
+      return data.doubt;
+    },
+    enabled: !!doubtId,
     staleTime: 0,
   });
 };
@@ -105,8 +119,11 @@ export const useCreateDoubt = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (doubt: Parameters<typeof doubtsStorage.addDoubt>[0]) => {
-      return doubtsStorage.addDoubt(doubt);
+    mutationFn: async (doubt: Pick<Doubt, 'subject' | 'question' | 'description'>) => {
+      return apiRequest<{ doubt: Doubt }>('/api/doubts', {
+        method: 'POST',
+        body: JSON.stringify(doubt),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doubts'] });
@@ -118,8 +135,11 @@ export const useReplyToDoubt = (doubtId: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (reply: Parameters<typeof doubtsStorage.addReply>[1]) => {
-      return doubtsStorage.addReply(doubtId, reply);
+    mutationFn: async (reply: Pick<Doubt['replies'][number], 'content'>) => {
+      return apiRequest<{ doubt: Doubt }>(`/api/doubts/${doubtId}/replies`, {
+        method: 'POST',
+        body: JSON.stringify(reply),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doubt', doubtId] });
@@ -133,8 +153,10 @@ export const useUpdateDoubtStatus = (doubtId: string) => {
 
   return useMutation({
     mutationFn: async (status: Doubt['status']) => {
-      doubtsStorage.updateDoubtStatus(doubtId, status);
-      return status;
+      return apiRequest<{ doubt: Doubt }>(`/api/doubts/${doubtId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doubt', doubtId] });
@@ -148,8 +170,9 @@ export const useUpvoteDoubt = (doubtId: string) => {
 
   return useMutation({
     mutationFn: async () => {
-      doubtsStorage.upvoteDoubt(doubtId);
-      return doubtId;
+      return apiRequest<{ ok: boolean }>(`/api/doubts/${doubtId}/upvote`, {
+        method: 'POST',
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doubt', doubtId] });
@@ -162,8 +185,12 @@ export const useUpvoteDoubt = (doubtId: string) => {
 export const useStudentProgress = (userId: string) => {
   return useQuery({
     queryKey: ['progress', userId],
-    queryFn: () => progressStorage.getProgress(userId),
-    staleTime: 60 * 1000, // 1 minute
+    queryFn: async () => {
+      const data = await apiRequest<{ progress: StudentProgress }>(`/api/progress/${userId}`);
+      return data.progress;
+    },
+    enabled: !!userId,
+    staleTime: 60 * 1000,
   });
 };
 
@@ -172,11 +199,89 @@ export const useUpdateProgress = () => {
 
   return useMutation({
     mutationFn: async ({ userId, updates }: { userId: string; updates: Partial<StudentProgress> }) => {
-      progressStorage.updateProgress(userId, updates);
-      return updates;
+      const data = await apiRequest<{ progress: StudentProgress }>(`/api/progress/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      return data.progress;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['progress', variables.userId] });
+    },
+  });
+};
+
+// Admin Hooks
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'student' | 'teacher' | 'admin';
+  status: 'active' | 'inactive';
+  avatar?: string;
+  joinDate: string;
+}
+
+export const useAdminUsers = () => {
+  return useQuery({
+    queryKey: ['admin-users'],
+    queryFn: async () => {
+      const data = await apiRequest<{ users: AdminUser[] }>('/api/admin/users');
+      return data.users;
+    },
+    staleTime: 0,
+  });
+};
+
+export const useCreateAdminUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      email: string;
+      role: 'student' | 'teacher' | 'admin';
+      password: string;
+      status?: 'active' | 'inactive';
+    }) => {
+      return apiRequest<{ user: AdminUser }>('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+  });
+};
+
+export const useUpdateAdminUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: Partial<AdminUser> & { password?: string } }) => {
+      return apiRequest<{ user: AdminUser }>(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+  });
+};
+
+export const useDeleteAdminUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest<{ ok: boolean }>(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
   });
 };

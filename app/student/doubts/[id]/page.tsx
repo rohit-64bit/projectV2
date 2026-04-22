@@ -67,9 +67,6 @@ export default function DoubtDetailPage() {
 
     try {
       await replyMutation.mutateAsync({
-        authorId: user?.id || '',
-        authorName: user?.name || 'Student',
-        authorAvatar: user?.avatar || '',
         content: replyText,
       });
       setReplyText('');

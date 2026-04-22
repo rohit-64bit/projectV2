@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Navbar } from '@/components/navbar';
 import { Sidebar } from '@/components/sidebar';
 import { ChatMessage } from '@/components/chat-message';
-import { useAuth } from '@/lib/auth-context';
 import { useChat, useSendMessage } from '@/hooks/use-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +13,6 @@ import { MessageCircle, Send, TrendingUp, BookOpen } from 'lucide-react';
 const CLASS_ID = 'general-class'; // Default class for now
 
 export default function ChatPage() {
-  const { user } = useAuth();
   const { data: messages = [] } = useChat(CLASS_ID);
   const sendMessageMutation = useSendMessage(CLASS_ID);
   const [input, setInput] = useState('');
@@ -52,28 +50,13 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMessage = input;
+    const message = input.trim();
     setInput('');
 
     try {
-      // Send user message
       await sendMessageMutation.mutateAsync({
-        userId: user?.id || '',
-        userName: user?.name || 'Student',
-        userAvatar: user?.avatar || '',
-        content: userMessage,
+        content: message,
       });
-
-      // Simulate AI response after a delay
-      setTimeout(() => {
-        sendMessageMutation.mutate({
-          userId: 'ai-assistant',
-          userName: 'AI Assistant',
-          userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ai',
-          content: generateAIResponse(userMessage),
-          isAI: true,
-        });
-      }, 1000);
     } catch (error) {
       console.error('Failed to send message:', error);
     }
@@ -173,23 +156,4 @@ export default function ChatPage() {
       </main>
     </div>
   );
-}
-
-// Simple AI response generator
-function generateAIResponse(userMessage: string): string {
-  const responses: { [key: string]: string } = {
-    math: 'Math is all about understanding patterns and relationships. Let me help you break down the concept step by step.',
-    science: 'Science is about observing the world and understanding how things work. What specific topic would you like to explore?',
-    history: 'History helps us understand how past events shape our present. Can you be more specific about which period or event?',
-    help: 'I\'m here to help! Feel free to ask any question about your studies, and I\'ll do my best to explain it clearly.',
-    default: 'That\'s a great question! Let me help you understand this better. Could you provide more context or details?',
-  };
-
-  const lowerMessage = userMessage.toLowerCase();
-  for (const [key, response] of Object.entries(responses)) {
-    if (lowerMessage.includes(key)) {
-      return response;
-    }
-  }
-  return responses.default;
 }
